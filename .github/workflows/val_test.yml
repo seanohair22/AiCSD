@@ -46,6 +46,8 @@ jobs:
     runs-on: ubuntu-20.04
     needs: [oem-ip, gateway-ip]
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
       - name: Build docker images
         run: make docker-build-gateway
 
@@ -58,6 +60,8 @@ jobs:
         with:
           name: tiff
           path: ${{ github.workspace }}/integration-tests/sample-files/example.tiff
+      - name: Checkout code
+        uses: actions/checkout@v3
       - name: oem-build
         run: make docker-build-oem
 
@@ -65,39 +69,43 @@ jobs:
     runs-on: ubuntu-20.04
     needs: [gateway-build]
     steps:
-    - name: Add OEM IP to compose
-      run: |
-        sed -i "s/<OEM_IP_ADDRESS>/${{ steps.get_oem_ip.outputs.linux_ip }}/g" docker-compose-edgex-spiffe-spire.yml
-        cat docker-compose-edgex-spiffe-spire.yml
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: Add OEM IP to compose
+        run: |
+          sed -i "s/<OEM_IP_ADDRESS>/${{ steps.get_oem_ip.outputs.linux_ip }}/g" docker-compose-edgex-spiffe-spire.yml
+          cat docker-compose-edgex-spiffe-spire.yml
 
-    - name: Start Gateway Services
-      run: |
-        make run-gateway-sim 
-        sleep 10
-        docker ps
+      - name: Start Gateway Services
+        run: |
+          make run-gateway-sim 
+          sleep 10
+          docker ps
 
-    - name: Check (task-launcher) service logs for startup
-      run: docker logs edgex-task-launcher
+      - name: Check (task-launcher) service logs for startup
+        run: docker logs edgex-task-launcher
 
-    - name: Add server entries
-      run: make add-ssh-server-entry
-    
-    - name: Create Task
-      run: "curl -X POST http://localhost:59785/api/v1/task -H \"Content-Type: application/json\" -d '{\"Description\": \"test\",\"JobSelector\": \"{ \"in\" : [ \".tiff\", { \"var\" : \"InputFile.Name\" } ] }\",\"PipelineId\": \"multi-file\",\"ResultFileFolder\": \"/tmp/files/output\",\"ModelParameters\": {\"Brightness\": \"0\"}}'"
-    - name: Check Task
-      id: check_task
-      run: |
-        sleep 5
-        curl http://localhost:59785/api/v1/task
-        echo "TASK_OUTPUT=$(curl -w "%{http_code}\\n" http://localhost:59785/api/v1/task -o /dev/null)" >> $GITHUB_OUTPUT
-    - name: Task Error Check
-      if: "!startsWith(steps.check_task.outputs.TASK_OUTPUT, '2')"
-      run: exit 1
+      - name: Add server entries
+        run: make add-ssh-server-entry
+      
+      - name: Create Task
+        run: "curl -X POST http://localhost:59785/api/v1/task -H \"Content-Type: application/json\" -d '{\"Description\": \"test\",\"JobSelector\": \"{ \"in\" : [ \".tiff\", { \"var\" : \"InputFile.Name\" } ] }\",\"PipelineId\": \"multi-file\",\"ResultFileFolder\": \"/tmp/files/output\",\"ModelParameters\": {\"Brightness\": \"0\"}}'"
+      - name: Check Task
+        id: check_task
+        run: |
+          sleep 5
+          curl http://localhost:59785/api/v1/task
+          echo "TASK_OUTPUT=$(curl -w "%{http_code}\\n" http://localhost:59785/api/v1/task -o /dev/null)" >> $GITHUB_OUTPUT
+      - name: Task Error Check
+        if: "!startsWith(steps.check_task.outputs.TASK_OUTPUT, '2')"
+        run: exit 1
 
   oem-start:
     runs-on: ubuntu-20.04
     needs: [gateway-start]
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
       - name: Start oem services
         run: make run-oem
       
@@ -152,6 +160,8 @@ jobs:
     runs-on: ubuntu-20.04
     needs: [two-system-val-test_gw-check]
     steps: 
+      - name: Checkout code
+        uses: actions/checkout@v3
       - name: Cleanup docker containers
         if: always()
         run: make down-oem clean-files clean-volumes clean-builders
@@ -162,6 +172,8 @@ jobs:
     runs-on: ubuntu-20.04
     needs: [two-system-val-test_gw-check]
     steps: 
+      - name: Checkout code
+        uses: actions/checkout@v3
       - name: Cleanup docker containers
         if: always()
         run: |
