@@ -51,7 +51,7 @@ jobs:
 
   oem-build:
     runs-on: "ubuntu-20.04"
-    needs: gateway-security-setup
+    needs: [oem-ip, gateway-ip]
     steps:
       - name: Upload Test Tiff
         uses: actions/upload-artifact@v3
