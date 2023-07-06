@@ -1,0 +1,173 @@
+name: Two System Validation Test
+run-name: Two System Validation Test
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+jobs:
+
+  gateway-ip:
+    runs-on: ubuntu-20.04
+    outputs:
+      ip: ${{ steps.get_gw_ip.outputs.linux_ip }}
+    steps: 
+      - name: Get GW Linux IP
+        id: get_gw_ip
+        run: |
+          value=$( hostname -I | awk {'print $1'} )
+          echo "linux_ip=$value" >> $GITHUB_OUTPUT
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+  oem-ip:
+    runs-on: ubuntu-20.04
+    outputs:
+      ip: ${{ steps.get_oem_ip.outputs.linux_ip }}
+      steps: 
+        - name: Get OEM Linux IP
+          id: get_oem_ip
+          run: |
+            value=$( hostname -I | awk {'print $1'} )
+            echo "linux_ip=$value" >> $GITHUB_OUTPUT
+        - name: Checkout code
+          uses: actions/checkout@v3
+
+  gateway-security-setup: 
+    runs-on: ubuntu-20.04
+    needs: [ oem-pull-code, gateway-pull-code ]
+    steps: 
+      - name: SSH Tunnel key generation
+        run: make generate-ssh-tunnel-keys
+      
+      # Use tool to scp in GH Actions
+      - name: SCP File Transfer
+
+
+
+  gateway-build:
+    runs-on: ubuntu-20.04
+    needs: [gateway-security-setup]
+      - name: Build docker images
+        run: make docker-build-gateway
+
+  oem-build:
+    runs-on: ubuntu-20.04
+      needs: [gateway-security-setup]
+        steps:
+          - name: Upload Test Tiff
+            uses: actions/upload-artifact@v3
+            with:
+              name: tiff
+              path: ${{ github.workspace }}/integration-tests/sample-files/example.tiff
+          - name: oem-build
+            run: make docker-build-oem
+
+  gateway-start:
+    runs-on: ubuntu-20.04
+    needs: [gateway-build]
+      steps:
+      - name: Add OEM IP to compose
+        run: |
+        sed -i "s/<OEM_IP_ADDRESS>/${{ steps.get_oem_ip.outputs.linux_ip }}/g" docker-compose-edgex-spiffe-spire.yml
+        cat docker-compose-edgex-spiffe-spire.yml
+
+      - name: Start Gateway Services
+        run: |
+          make run-gateway-sim 
+          sleep 10
+          docker ps
+      - name: Check (task-launcher) service logs for startup
+
+      - name: Add server entries
+         run: make add-ssh-server-entry
+      
+      - name: Create Task
+          run: |
+            curl -X POST http://localhost:59785/api/v1/task -H "Content-Type: application/json" -d '{"Description": "test","JobSelector": "{ \"in\" : [ \".tiff\", { \"var\" : \"InputFile.Name\" } ] }","PipelineId": "multi-file","ResultFileFolder": "/tmp/files/output","ModelParameters": {"Brightness": "0"}}'
+      - name: Check Task
+        id: check_task
+        run: |
+          sleep 5
+          curl http://localhost:59785/api/v1/task
+          echo "TASK_OUTPUT=$(curl -w "%{http_code}\\n" http://localhost:59785/api/v1/task -o /dev/null)" >> $GITHUB_OUTPUT
+      - name: Task Error Check
+        if: "!startsWith(steps.check_task.outputs.TASK_OUTPUT, '2')"
+        run: exit 1
+
+  oem-start:
+    runs-on: ubuntu-20.04
+      needs: [gateway-start]
+        steps:
+          - name: Start oem services
+            run: make run-oem
+          
+          - name: Check oem startup (remote-spire-agent container for "Fetched X.509 SVID")
+            run: docker logs edgex-remote-spire-agent
+
+  two-system-val-test_oem-side:
+    runs-on: ubuntu-20.04
+      needs: [gateway-start, oem-start]
+        steps: 
+      - name: Download Test Image
+        uses: actions/download-artifact@v3
+        with:
+          name: tiff
+      - name: Move Files to be Processed
+        run: mv example.tiff $HOME/data/oem-files/input
+
+  two-system-val-test_gw-check:
+    runs-on: ubuntu-20.04
+      needs: [two-system-val-test_oem-side]
+        steps: 
+          - name: Check Job
+            id: check_job
+            run: |
+              sleep 10
+              curl http://localhost:59784/api/v1/job
+              echo "JOB_OUTPUT=$(curl -w "%{http_code}\\n" http://localhost:59784/api/v1/job -o /dev/null)" >> $GITHUB_OUTPUT
+          
+          - name: Job Error Check
+            if: "!startsWith(steps.check_job.outputs.JOB_OUTPUT, '2')"
+            run: exit 1
+
+          - name: File Sender Gateway Logs
+            run: docker logs edgex-file-sender-gateway-1
+
+          - name: MQTT Logs
+            run: docker logs edgex-edgex-mqtt-broker-1
+
+          - name: Web UI Logs
+            run: docker logs edgex-web-ui-1
+
+          - name: Job Repo Logs
+            run: docker logs edgex-job-repository-1
+
+          - name: File Receiver Gateway Logs
+            run: docker logs edgex-file-receiver-gateway-1
+
+          - name: Consul Logs
+            run: docker logs edgex-edgex-core-consul-1
+
+  testing-cleanup-oem:
+    runs-on: ubuntu-20.04
+      needs: [two-system-val-test_gw-check]
+        steps: 
+          - name: Cleanup docker containers
+            if: always()
+            run: |
+              make down-oem clean-files clean-volumes clean-builders
+          - name: Cleanup code dir
+            run: sudo rm -rf /data/gha/workspace-007/applications.retail.kaskey-park.kaskey-park/applications.retail.kaskey-park.kaskey-park
+
+  testing-cleanup-gw:
+    runs-on: ubuntu-20.04
+      needs: [two-system-val-test_gw-check]
+        steps: 
+          - name: Cleanup docker containers
+            if: always()
+            run: |
+              make down clean-files clean-volumes clean-builders
+          - name: Cleanup code dir
+            run: sudo rm -rf /data/gha/workspace-008/applications.retail.kaskey-park.kaskey-park/applications.retail.kaskey-park.kaskey-park
