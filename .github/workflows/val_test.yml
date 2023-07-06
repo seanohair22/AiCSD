@@ -36,7 +36,7 @@ jobs:
 
   gateway-security-setup: 
     runs-on: ubuntu-20.04
-    needs: [ oem-pull-code, gateway-pull-code ]
+    needs: [ oem-ip, gateway-ip ]
     steps: 
       - name: SSH Tunnel key generation
         run: make generate-ssh-tunnel-keys
