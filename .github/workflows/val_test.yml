@@ -44,7 +44,7 @@ jobs:
       # Use tool to scp in GH Actions
   gateway-build:
     runs-on: ubuntu-20.04
-    needs: [gateway-security-setup]
+    needs: [oem-ip, gateway-ip]
     steps:
       - name: Build docker images
         run: make docker-build-gateway
