@@ -34,15 +34,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-  gateway-security-setup: 
-    runs-on: ubuntu-20.04
-    needs: [ oem-ip, gateway-ip ]
-    steps: 
-      - name: SSH Tunnel key generation
-        run: make generate-ssh-tunnel-keys
-      
-      # Use tool to scp in GH Actions
+  # gateway-security-setup: 
+  #   runs-on: ubuntu-20.04
+  #   needs: [ oem-ip, gateway-ip ]
+  #   steps: 
 
+  #     - name: SSH Tunnel key generation
+  #       run: make generate-ssh-tunnel-keys
+      # Use tool to scp in GH Actions
   gateway-build:
     runs-on: ubuntu-20.04
     needs: [gateway-security-setup]
