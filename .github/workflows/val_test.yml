@@ -47,7 +47,7 @@ jobs:
       #https://github.com/marketplace/actions/scp-files
 
       - name: Build docker images
-        run: make docker-build-gateway
+        run: make -j4 docker-build-gateway
 
       - name: Add OEM IP to compose-file
         run: |
