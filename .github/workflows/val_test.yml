@@ -61,7 +61,7 @@ jobs:
           docker ps
 
       - name: Check (task-launcher) service logs for startup
-        run: docker logs edgex-task-launcher
+        run: docker logs edgex-task-launcher-1
 
       - name: Add server entries
         run: make add-ssh-server-entry
