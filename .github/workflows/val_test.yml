@@ -34,47 +34,24 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-  gateway-security-setup: 
+  gateway:
     runs-on: ubuntu-20.04
-    needs: [ oem-ip, gateway-ip ]
-    steps: 
+    needs: [oem-ip, gateway-ip]
+    steps:
       - name: Checkout code
         uses: actions/checkout@v3
+
       - name: SSH Tunnel key generation
         run: make generate-ssh-tunnel-keys
       # Use tool to scp in GH Actions
-  gateway-build:
-    runs-on: ubuntu-20.04
-    needs: [oem-ip, gateway-ip, gateway-security-setup]
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      #https://github.com/marketplace/actions/scp-files
+
       - name: Build docker images
         run: make docker-build-gateway
 
-  oem-build:
-    runs-on: "ubuntu-20.04"
-    needs: [oem-ip, gateway-ip]
-    steps:
-      - name: Upload Test Tiff
-        uses: actions/upload-artifact@v3
-        with:
-          name: tiff
-          path: ${{ github.workspace }}/integration-tests/sample-files/example.tiff
-      - name: Checkout code
-        uses: actions/checkout@v3
-      - name: oem-build
-        run: make docker-build-oem
-
-  gateway-start:
-    runs-on: ubuntu-20.04
-    needs: [gateway-build, oem-ip]
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-      - name: Add OEM IP to compose
+      - name: Add OEM IP to compose-file
         run: |
-          sed -i "s/<OEM_IP_ADDRESS>/${{ needs.oem-ip.outputs.linux_ip }}/g" docker-compose-edgex-spiffe-spire.yml
+          sed -i "s/<OEM_IP_ADDRESS>/${{ needs.oem-ip.outputs.ip }}/g" docker-compose-edgex-spiffe-spire.yml
           cat docker-compose-edgex-spiffe-spire.yml
 
       - name: Start Gateway Services
@@ -90,7 +67,10 @@ jobs:
         run: make add-ssh-server-entry
       
       - name: Create Task
-        run: "curl -X POST http://localhost:59785/api/v1/task -H \"Content-Type: application/json\" -d '{\"Description\": \"test\",\"JobSelector\": \"{ \"in\" : [ \".tiff\", { \"var\" : \"InputFile.Name\" } ] }\",\"PipelineId\": \"multi-file\",\"ResultFileFolder\": \"/tmp/files/output\",\"ModelParameters\": {\"Brightness\": \"0\"}}'"
+        run: |
+          sleep 5
+          curl -X POST http://localhost:59785/api/v1/task -H \"Content-Type: application/json\" -d '{\"Description\": \"test\",\"JobSelector\": \"{ \"in\" : [ \".tiff\", { \"var\" : \"InputFile.Name\" } ] }\",\"PipelineId\": \"multi-file\",\"ResultFileFolder\": \"/tmp/files/output\",\"ModelParameters\": {\"Brightness\": \"0\"}}'
+      
       - name: Check Task
         id: check_task
         run: |
@@ -101,33 +81,7 @@ jobs:
         if: "!startsWith(steps.check_task.outputs.TASK_OUTPUT, '2')"
         run: exit 1
 
-  oem-start:
-    runs-on: ubuntu-20.04
-    needs: [gateway-start]
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-      - name: Start oem services
-        run: make run-oem
       
-      - name: Check oem startup (remote-spire-agent container for "Fetched X.509 SVID")
-        run: docker logs edgex-remote-spire-agent
-
-  two-system-val-test_oem-side:
-    runs-on: ubuntu-20.04
-    needs: [gateway-start, oem-start]
-    steps: 
-      - name: Download Test Image
-        uses: actions/download-artifact@v3
-        with:
-          name: tiff
-      - name: Move Files to be Processed
-        run: mv example.tiff $HOME/data/oem-files/input
-
-  two-system-val-test_gw-check:
-    runs-on: ubuntu-20.04
-    needs: [two-system-val-test_oem-side]
-    steps: 
       - name: Check Job
         id: check_job
         run: |
@@ -157,27 +111,69 @@ jobs:
       - name: Consul Logs
         run: docker logs edgex-edgex-core-consul-1
 
+  oem:
+    runs-on: "ubuntu-20.04"
+    needs: [oem-ip, gateway-ip]
+    steps:
+      - name: Upload Test Tiff
+        uses: actions/upload-artifact@v3
+        with:
+          name: tiff
+          path: ${{ github.workspace }}/integration-tests/sample-files/example.tiff
+
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: oem-build
+        run: |
+          make docker-build-oem
+          sleep 60
+
+      # Look for wait-for check
+
+      - name: Start oem services
+        run: |
+          make run-oem
+          sleep 15
+      
+      - name: Check oem startup (remote-spire-agent container for "Fetched X.509 SVID")
+        run: docker logs edgex-remote-spire-agent
+
+      - name: Download Test Image
+        uses: actions/download-artifact@v3
+        with:
+          name: tiff
+      - name: Move Files to be Processed
+        run: |
+          mv example.tiff $HOME/data/oem-files/input
+          sleep 20
+
+      - name: Filewatcher Logs
+        run: docker logs edgex-file-watcher-1
+      - name: Data Organizer Logs
+        run: docker logs edgex-data-organizer-1
+      - name: File Sender Logs
+        run: docker logs edgex-file-sender-oem-1
+      - name: File Receiver Logs
+        run: docker logs edgex-file-receiver-oem-1
+
   testing-cleanup-oem:
     runs-on: ubuntu-20.04
-    needs: [two-system-val-test_gw-check]
+    needs: oem
     steps: 
       - name: Checkout code
         uses: actions/checkout@v3
       - name: Cleanup docker containers
         if: always()
-        run: make down-oem clean-files clean-volumes clean-builders
-      - name: Cleanup code dir
-        run: sudo rm -rf /data/gha/workspace-007/applications.retail.kaskey-park.kaskey-park/applications.retail.kaskey-park.kaskey-park
-
+        run: make down-oem clean-files clean-volumes clean-builders clean-images
+      
   testing-cleanup-gw:
     runs-on: ubuntu-20.04
-    needs: [two-system-val-test_gw-check]
+    needs: gateway
     steps: 
       - name: Checkout code
         uses: actions/checkout@v3
       - name: Cleanup docker containers
         if: always()
         run: |
-          make down clean-files clean-volumes clean-builders
-      - name: Cleanup code dir
-        run: sudo rm -rf /data/gha/workspace-008/applications.retail.kaskey-park.kaskey-park/applications.retail.kaskey-park.kaskey-park
+          make down clean-files clean-volumes clean-builders clean-images
