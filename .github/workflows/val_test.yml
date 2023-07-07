@@ -115,14 +115,14 @@ jobs:
     runs-on: "ubuntu-20.04"
     needs: [oem-ip, gateway-ip]
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
       - name: Upload Test Tiff
         uses: actions/upload-artifact@v3
         with:
           name: tiff
           path: ${{ github.workspace }}/integration-tests/sample-files/example.tiff
-
-      - name: Checkout code
-        uses: actions/checkout@v3
 
       - name: oem-build
         run: |
