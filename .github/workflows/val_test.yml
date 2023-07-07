@@ -45,7 +45,7 @@ jobs:
         run: make generate-ssh-tunnel-keys
       # Use tool to scp in GH Actions
       - name: Transfer Keys via scp
-        uses: appleboy/scp-action@v0.0.1
+        uses: appleboy/scp-action@v0.1.4
         with:
           host: ${{needs.oem-ip.outputs.ip}}
           source: "./edgex-res/remote/sshd-remote/authorized_keys"
