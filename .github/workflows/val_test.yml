@@ -55,7 +55,7 @@ jobs:
         id: transfer_priv_key
         run: |
           priv_value=$(cat ./edgex-res/ssh_keys/id_rsa)
-          echo "priv_key=$priv_value" >> $GITHUB_OUTPUT
+          echo "priv_key=txt" >> $GITHUB_OUTPUT
 
   gateway:
     runs-on: ubuntu-20.04
