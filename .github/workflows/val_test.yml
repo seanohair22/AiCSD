@@ -37,19 +37,23 @@ jobs:
     runs-on: ubuntu-20.04
     needs: [oem-ip, gateway-ip]
     outputs:
-      pub_key: ${{ steps.transfer_key.outputs.pub_key }}
-      priv_key: ${{ steps.transfer_key.outputs.priv_key }}
+      pub_key: ${{ steps.transfer_pub_key.outputs.pub_key }}
+      priv_key: ${{ steps.transfer_priv_key.outputs.priv_key }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
 
       - name: SSH Tunnel key generation
         run: make generate-ssh-tunnel-keys
-      - name: Transfer keys
-        id: transfer_key
+      - name: Transfer Public Key
+        id: transfer_pub_key
         run: |
           pub_value=$(cat ./edgex-res/remote/sshd-remote/authorized_keys)
           echo "pub_key=$pub_value" >> $GITHUB_OUTPUT
+
+      - name: Transfer Private Key
+        id: transfer_priv_key
+        run: |
           priv_value=$(cat ./edgex-res/ssh_keys/id_rsa)
           echo "priv_key=$priv_value" >> $GITHUB_OUTPUT
 
@@ -124,7 +128,7 @@ jobs:
 
   oem:
     runs-on: "ubuntu-20.04"
-    needs: [oem-ip, gateway-ip]
+    needs: [oem-ip, gateway-security-setup]
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
