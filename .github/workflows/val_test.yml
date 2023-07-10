@@ -33,25 +33,30 @@ jobs:
           echo "linux_ip=$value" >> $GITHUB_OUTPUT
       - name: Checkout code
         uses: actions/checkout@v3
-
-  gateway:
+  gateway-security-setup:
     runs-on: ubuntu-20.04
     needs: [oem-ip, gateway-ip]
+    outputs:
+      pub_key: ${{ steps.transfer_key.outputs.pub_key }}
+      priv_key: ${{ steps.transfer_key.outputs.priv_key }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
 
       - name: SSH Tunnel key generation
         run: make generate-ssh-tunnel-keys
-      # Use tool to scp in GH Actions
-      - name: Transfer Keys via scp
-        uses: appleboy/scp-action@v0.1.4
-        with:
-          host: ${{needs.oem-ip.outputs.ip}}
-          source: "./edgex-res/remote/sshd-remote/authorized_keys"
-          target: ${{ github.workspace }}/edgex-res/sshd-remote
+      - name: Transfer keys
+        id: transfer_key
+        run: |
+          pub_value=$(cat ./edgex-res/remote/sshd-remote/authorized_keys)
+          echo "pub_key=$pub_value" >> $GITHUB_OUTPUT
+          priv_value=$(cat ./edgex-res/ssh_keys/id_rsa)
+          echo "priv_key=$priv_value" >> $GITHUB_OUTPUT
 
-
+  gateway:
+    runs-on: ubuntu-20.04
+    needs: [oem-ip, gateway-security-setup]
+    steps:
       - name: Build docker images
         run: make -j4 docker-build-gateway
 
