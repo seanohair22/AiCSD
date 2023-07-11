@@ -49,12 +49,14 @@ jobs:
         id: transfer_pub_key
         run: |
           pub_value=$(cat ./edgex-res/remote/sshd-remote/authorized_keys)
+          echo $pub_value
           echo "pub_key=$pub_value" >> $GITHUB_OUTPUT
 
       - name: Transfer Private Key
         id: transfer_priv_key
         run: |
           priv_value=$(cat ./edgex-res/ssh_keys/id_rsa | tr '\n' '\\\\\n')
+          echo $priv_value
           echo "priv_key=$priv_value" >> $GITHUB_OUTPUT
 
   gateway:
@@ -63,6 +65,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+
+      - name: copy_pub_key
+        run: # cp pub/priv to keys
 
       - name: Build docker images
         run: make -j4 docker-build-gateway
